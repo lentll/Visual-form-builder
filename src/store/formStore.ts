@@ -420,16 +420,52 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   },
   testDbConnection: async () => {
     const { settings } = get();
-    // 模拟连接测试（实际项目需后端 API）
-    await new Promise(r => setTimeout(r, 1200));
+
+    // localStorage 不需要后端，直接返回
     if (settings.dbType === 'localStorage') {
       return { ok: true, message: '浏览器本地存储连接正常' };
     }
-    if (!settings.dbHost || !settings.dbName) {
-      return { ok: false, message: '请填写完整的数据库连接信息' };
+
+    // 基础校验
+    if (settings.dbType !== 'sqlite') {
+      if (!settings.dbHost) {
+        return { ok: false, message: '请填写主机地址' };
+      }
+      if (!settings.dbName) {
+        return { ok: false, message: '请填写数据库名称' };
+      }
+    } else {
+      if (!settings.dbName) {
+        return { ok: false, message: '请填写 SQLite 数据库文件路径' };
+      }
     }
-    // 模拟连接成功（演示用）
-    return { ok: true, message: `${settings.dbType.toUpperCase()} 连接测试成功（演示模式）` };
+
+    // 调用后端 API 测试真实数据库连接
+    try {
+      const apiBase = import.meta.env.VITE_API_BASE || '';
+      const response = await fetch(`${apiBase}/api/db/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: settings.dbType,
+          host: settings.dbHost,
+          port: settings.dbPort,
+          database: settings.dbName,
+          user: settings.dbUser,
+          password: settings.dbPassword,
+        }),
+      });
+
+      if (!response.ok) {
+        return { ok: false, message: `服务器错误 (HTTP ${response.status})` };
+      }
+
+      const data = await response.json();
+      return { ok: data.ok, message: data.message };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, message: `API 请求失败: ${msg}。请确认后端服务已启动。` };
+    }
   },
 }));
 
