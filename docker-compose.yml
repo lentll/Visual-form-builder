@@ -1,0 +1,35 @@
+# ─────────────────────────────────────────────
+# 可视化表单系统 — Docker Compose 一键部署
+#
+# 本地单架构部署:
+#   docker compose up -d --build
+#   访问: http://localhost:8080
+#
+# 多架构镜像构建 (amd64 / arm64 / arm/v7):
+#   PowerShell:  ./build-multiarch.ps1
+#   Bash:        ./build-multiarch.sh
+#   构建后在此文件中将 image 改为远程仓库地址即可跨平台拉取
+# ─────────────────────────────────────────────
+
+services:
+  form-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: form-builder:latest
+    container_name: form-builder
+    restart: unless-stopped
+    ports:
+      - "8080:80"        # 宿主机 8080 → 容器 80，如端口冲突改左侧
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # 可选：日志大小限制，防止日志撑满磁盘
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

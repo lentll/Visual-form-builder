@@ -1,0 +1,156 @@
+# ─────────────────────────────────────────────
+# 可视化表单系统 — 多架构 Docker 镜像自动构建
+#
+# 触发条件：
+#   - push 到 main 分支 → 构建 latest + sha 标签
+#   - 推送 tag (v* 格式) → 构建 version + latest 标签
+#   - 手动触发 (Actions → Run workflow)
+#
+# 构建平台：linux/amd64 | linux/arm64 | linux/arm/v7
+# 推送目标：GitHub Container Registry (ghcr.io) [默认，零配置]
+#           Docker Hub            [可选，配置两个 Secrets 后启用]
+# ─────────────────────────────────────────────
+
+name: Docker Multi-Arch Build
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: form-builder
+  PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # ── Step 1: 检出代码 ──
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Step 2: 检测 Docker Hub 是否已配置 ──
+      - name: Check Docker Hub availability
+        id: dockerhub
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DH_USER" ] && [ -n "$DH_TOKEN" ]; then
+            echo "enabled=true" >> $GITHUB_OUTPUT
+            echo "Docker Hub: detected → will push to Docker Hub"
+          else
+            echo "enabled=false" >> $GITHUB_OUTPUT
+            echo "Docker Hub: not configured → ghcr.io only"
+          fi
+
+      # ── Step 3: 设置 QEMU（ARM 模拟） ──
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64,arm
+
+      # ── Step 4: 设置 Docker Buildx ──
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          driver-opts: |
+            network=host
+
+      # ── Step 5: 登录 GitHub Container Registry（零配置） ──
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Step 6: 登录 Docker Hub（仅预配了凭据时） ──
+      - name: Login to Docker Hub
+        if: steps.dockerhub.outputs.enabled == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ── Step 7: 组装镜像目标列表 ──
+      - name: Prepare image targets
+        id: targets
+        run: |
+          TARGETS="ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME"
+          if [ "${{ steps.dockerhub.outputs.enabled }}" = "true" ]; then
+            TARGETS="$TARGETS"$'\n'"docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME"
+          fi
+          echo "list<<EOF" >> $GITHUB_OUTPUT
+          echo "$TARGETS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # ── Step 8: 提取元数据（标签 + 注解） ──
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.targets.outputs.list }}
+          tags: |
+            # main 分支推送 → latest
+            type=raw,value=latest,enable=${{ github.ref_type == 'branch' && github.ref_name == 'main' }}
+            # tag 推送 v1.2.3 → v1.2.3 / v1.2 / v1 / latest
+            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{major}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # 始终附加 commit SHA
+            type=sha,prefix=sha-
+
+      # ── Step 9: 构建并推送多架构镜像 ──
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      # ── Step 10: 输出结果摘要 ──
+      - name: Image summary
+        run: |
+          {
+            echo "### Docker 多架构镜像构建完成"
+            echo ""
+            echo "| 项目 | 值 |"
+            echo "|------|-----|"
+            echo "| 平台 | $PLATFORMS |"
+            echo "| 镜像 | ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME |"
+          } >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.dockerhub.outputs.enabled }}" = "true" ]; then
+            echo "| Docker Hub | docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          {
+            echo ""
+            echo "#### 标签列表"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo ""
+            echo "#### 拉取命令"
+            echo '```bash'
+            echo "docker pull ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:latest"
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
