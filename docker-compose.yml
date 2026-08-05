@@ -19,6 +19,11 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # SQLite 数据库持久化（如使用 SQLite）
-    # volumes:
-    #   - ./data:/app/data
+    volumes:
+      # SQLite 数据库持久化（命名卷，Docker 自动管理）
+      - form-builder-data:/app/data
+      # 上传文件持久化（按需启用）
+      # - ./uploads:/app/uploads
+
+volumes:
+  form-builder-data:
