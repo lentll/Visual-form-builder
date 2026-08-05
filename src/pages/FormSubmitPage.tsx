@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFormStore, useSystemStore } from '@/store/formStore';
-import type { FormField, FieldOption } from '@/types/form';
-import { Send, CheckCircle, Star, Lock, ExternalLink, Navigation, MapPin, Link, QrCode, Plus, Trash2, Award } from 'lucide-react';
+import type { FormField } from '@/types/form';
+import { Send, CheckCircle, Star, Lock, ExternalLink, Navigation, MapPin, Link, QrCode, Plus, Trash2 } from 'lucide-react';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import type { LightboxImage } from '@/components/ImageLightbox';
 

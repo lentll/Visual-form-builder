@@ -1,6 +1,6 @@
 import React from 'react';
 import type { FormField } from '@/types/form';
-import { Star, Minus, MapPin, Navigation, QrCode, Link, User, Phone, Mail, CreditCard, TrendingUp, Award, Percent, DollarSign, Tags, GitBranch, ArrowRight, ArrowLeftRight, Table2, Plus, Trash2 } from 'lucide-react';
+import { Star, Minus, MapPin, Navigation, QrCode, Link, User, Phone, Mail, CreditCard, Percent, ArrowRight, ArrowLeftRight, Plus, Trash2 } from 'lucide-react';
 
 interface FieldPreviewProps {
   field: FormField;

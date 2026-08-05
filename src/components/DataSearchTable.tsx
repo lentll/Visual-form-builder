@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import type { FormField, FormSubmission } from '@/types/form';
+import type { FormField, FormSubmission, FieldOption } from '@/types/form';
 import { Search, X, ChevronDown, Edit3, Save, AlertCircle, Download, FileSpreadsheet, Plus, Trash2, ImageIcon, Eye } from 'lucide-react';
 import { AttachmentPreview } from './AttachmentPreview';
 import { ImageLightbox } from './ImageLightbox';
