@@ -1,9 +1,13 @@
 services:
   form-builder:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: form-builder:latest
+    # ── 方式一：拉取远程多架构镜像（推荐，默认）──
+    image: ghcr.io/lentll/form-builder:latest
+
+    # ── 方式二：本地源码构建（需要改代码时，注释上面的 image 并取消下面注释）──
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+
     container_name: form-builder
     restart: unless-stopped
     ports:

@@ -16,12 +16,43 @@
 
 ## Docker 部署（推荐）
 
-镜像支持多架构：**x86_64 (amd64)** | **ARM64 (aarch64)** | **ARMv7 (树莓派等)**
+镜像地址：**`ghcr.io/lentll/form-builder`**
+支持多架构：**x86_64 (amd64)** | **ARM64 (aarch64)** | **ARMv7 (树莓派等)**
 
 ### 拉取镜像
 
+镜像为公开包，**无需登录**直接拉取：
+
 ```bash
-docker pull ghcr.io/lentll/visual-form-builder:latest
+docker pull ghcr.io/lentll/form-builder:latest
+```
+
+Docker 会自动选择与宿主机架构匹配的镜像层，无需手动指定平台。
+
+> 若提示 `unauthorized`（极少见，通常是本地缓存了旧的凭据），先登录一次：
+> ```bash
+> echo <你的GitHub PAT> | docker login ghcr.io -u lentll --password-stdin
+> ```
+> PAT 只需勾选 `read:packages` 权限。
+
+### 查看可用架构 / 标签
+
+```bash
+# 查看镜像支持的所有平台
+docker manifest inspect ghcr.io/lentll/form-builder:latest
+
+# 查看所有标签
+# latest、sha-xxxxxxx（每次提交自动生成）
+```
+
+### 指定架构拉取（跨架构场景）
+
+```bash
+# 例如在 x86 机器上为树莓派拉取 ARM64 镜像
+docker pull --platform linux/arm64 ghcr.io/lentll/form-builder:latest
+
+# ARMv7（32位树莓派）
+docker pull --platform linux/arm/v7 ghcr.io/lentll/form-builder:latest
 ```
 
 ### 直接运行
@@ -29,26 +60,42 @@ docker pull ghcr.io/lentll/visual-form-builder:latest
 ```bash
 docker run -d \
   --name form-builder \
+  --restart unless-stopped \
   -p 8080:3000 \
   -v form-builder-data:/app/data \
-  ghcr.io/lentll/visual-form-builder:latest
+  ghcr.io/lentll/form-builder:latest
 ```
 
 访问 `http://localhost:8080` 即可使用。
+
+### 更新到最新版本
+
+```bash
+docker pull ghcr.io/lentll/form-builder:latest
+docker stop form-builder && docker rm form-builder
+# 重新执行上面的 docker run 命令（数据卷 form-builder-data 会保留）
+
+# 或者使用 compose
+docker compose pull && docker compose up -d
+```
 
 ---
 
 ## Docker Compose 部署（一键部署）
 
-项目已内置 `docker-compose.yml`：
+项目已内置 `docker-compose.yml`，默认从 ghcr.io 拉取镜像：
 
 ```bash
-# 克隆项目
+# 克隆项目（只为拿 docker-compose.yml）
 git clone https://github.com/lentll/Visual-form-builder.git
 cd Visual-form-builder
 
-# 一键启动
+# 一键启动（自动拉取多架构镜像）
 docker compose up -d
+
+# 查看状态
+docker compose ps
+docker compose logs -f
 ```
 
 完整 `docker-compose.yml` 内容：
@@ -56,14 +103,20 @@ docker compose up -d
 ```yaml
 services:
   form-builder:
-    image: ghcr.io/lentll/visual-form-builder:latest
+    # 方式一：拉取远程镜像（默认）
+    image: ghcr.io/lentll/form-builder:latest
+
+    # 方式二：本地构建（需要改代码时启用，同时注释掉上面的 image）
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+
     container_name: form-builder
+    restart: unless-stopped
     ports:
       - "8080:3000"        # 宿主机端口 : 容器端口
-    restart: unless-stopped
     volumes:
       - form-builder-data:/app/data      # SQLite 数据库持久化
-      - ./uploads:/app/uploads           # 上传文件持久化（如有）
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/healthz"]
       interval: 30s
@@ -103,7 +156,7 @@ docker run -d \
   -p 8080:3000 \
   -v /opt/form-builder/data:/app/data \       # 宿主机目录映射
   -v /opt/form-builder/uploads:/app/uploads \ # 可选：上传文件目录
-  ghcr.io/lentll/visual-form-builder:latest
+  ghcr.io/lentll/form-builder:latest
 ```
 
 ### Docker Compose 方式
@@ -185,9 +238,16 @@ Docker 会自动选择与宿主机架构匹配的镜像，无需手动指定。
 
 ## CI/CD
 
-推送代码到 `main` 分支或创建版本 Tag（`v*`）时，GitHub Actions 自动构建三架构 Docker 镜像并推送到 `ghcr.io`。
+推送代码到 `main` 分支或创建版本 Tag（`v*`）时，GitHub Actions 自动构建三架构 Docker 镜像并推送。
 
-工作流配置：`.github/workflows/docker-build.yml`
+- **镜像仓库**：`ghcr.io/lentll/form-builder`
+- **工作流配置**：`.github/workflows/docker-build.yml`
+- **构建平台**：`linux/amd64`、`linux/arm64`、`linux/arm/v7`
+- **标签规则**：
+  - push `main` → `latest` + `sha-<commit>`
+  - 推送 tag `v1.2.3` → `v1.2.3`、`v1.2`、`v1`、`latest`
+
+手动触发：仓库 **Actions** → **Docker Multi-Arch Build** → **Run workflow**。
 
 ---
 
